@@ -1,0 +1,13 @@
+# These values are specifically meant for testing of the helm chart
+# and will be replaced by real secrets and values during a full deployment
+
+database:
+  password: secret
+
+global:
+  account: dev
+  newrelic:
+    key: '123'
+
+app:
+  secret_key: app_secret

@@ -1,0 +1,22 @@
+{{- /*
+This configmap loads values from the helm files as environment variable names.
+It is then referenced in the deployment so that these environment variables are actually injected into the pods.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "versions_service.fullname" . }}-env
+  labels:
+{{ include "labels" . | indent 4 }}
+data:
+  BCRYPT_LOG_ROUNDS: "13"
+  DATABASE_NAME: "{{ .Values.database.name }}"
+  DEBUG: "{{ .Values.app.debug }}"
+  ENV: "{{ .Values.global.environment }}"
+  LOG_LEVEL: "{{ .Values.app.log_level }}"
+  SQLALCHEMY_ECHO: "false"
+  SQLALCHEMY_TRACK_MODIFICATIONS: "false"
+  STATSD_HOST: localhost
+  STATSD_MAX_UDP_SIZE: "512"
+  STATSD_PORT: "8125"
+  STATSD_PREFIX: "{{ .Chart.Name }}"

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+
+main() {
+  dependencies "$@"
+}
+
+
+dependencies() {
+  action=$1
+  case $action in
+    install)
+      (
+        echo "Updating dependencies..."
+        bin/exec pipenv install --system --dev --skip-lock
+      )
+      ;;
+    lock)
+      (
+        echo "Locking dependencies..."
+        bin/exec sh -c "python setup.py build && pipenv lock"
+      )
+      ;;
+    list)
+      (
+        echo "Listing dependencies..."
+        bin/exec pip freeze
+      )
+      ;;
+  esac
+}
+
+
+main "$@"
+
+
+# vim: ts=2 sw=2 sts=2 et

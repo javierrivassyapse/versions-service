@@ -1,0 +1,30 @@
+{{- /*
+This job rewinds the database associated with this service to its base migration.  It runs:
+  * Before the chart is  rolled back to a previous version
+*/ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "versions_service.fullname" . }}-reset-db
+  labels:
+{{ include "labels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-rollback
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: {{ template "versions_service.name" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          envFrom:
+          - configMapRef:
+              name: {{ template "versions_service.fullname" . }}-env
+          - secretRef:
+              name: {{ template "versions_service.fullname" . }}-secrets
+          args:
+            - /bin/sh
+            - -c
+            - export FLASK_APP=autoapp.py && flask db downgrade

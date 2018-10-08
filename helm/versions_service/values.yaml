@@ -1,0 +1,85 @@
+# Default values for versions_service.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# How many deployment pods should we have to receive traffic from the service?
+replicaCount: 1
+
+# General variables that inform the chart what environment we're in, the newrelic key, etc.
+global:
+  account: dev
+  environment: dev
+  team: Syapse Engineering  # Replaced by the cookiecutter with the injected value
+  newrelic:
+    key: ''
+
+# Where do we get the image for the main worker pod?
+image:
+  repository: 141380700111.dkr.ecr.us-west-2.amazonaws.com/versions_service
+  tag: latest
+  pullPolicy: Always
+
+# What type of service are we using here and other configuration for the service wrapper
+# See https://kubernetes.io/docs/concepts/services-networking/service/ for more info
+service:
+  type: ClusterIP
+  port: 443
+  # Configuration of the load balancer or ambassador goes in annotations here
+  annotations: {}
+
+# Configuration for gunicorn
+gunicorn:
+  bindport: 18663
+  workercount: 3
+
+# Configuration for the app.  If you're app is doing something extra above the standard functionality,
+# set the information for that here
+app:
+  debug: "false"
+  log_level: WARN
+
+# Database configuration, set to where the main deployment can locate the database, which is deployed
+# by terraform
+database:
+  host: localhost
+  port: 5432
+  name: versions_service
+  user: postgres
+  # pass: <from secrets.yaml >
+  bootstrap: false
+
+  # Configuration for the management of the database, specifically the image for the management pod(s)
+  management:
+    image:
+      repository: postgres
+      tag: "10.4-alpine"
+
+
+# Nginx configuration
+nginx:
+  image:
+    repository: 141380700111.dkr.ecr.us-west-2.amazonaws.com/nginx
+    tag: 1.0.5
+    pullPolicy: Always
+  existingSecretName: tls
+  resources: {}
+  port: 443
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #  cpu: 100m
+  #  memory: 128Mi
+  # requests:
+  #  cpu: 100m
+  #  memory: 128Mi
+
+# Constrains what nodes the pods specified here can run on, rarely used
+nodeSelector: {}
+
+# If we wish to specify what nodes pods shouldn't run on, we may set these as well, rarely used
+# if a pod is repelled by a certain node, this determines how strong that is
+tolerations: []

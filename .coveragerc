@@ -1,0 +1,5 @@
+[run]
+source = versions_service/
+
+[xml]
+output = coverage.xml

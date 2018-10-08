@@ -1,0 +1,101 @@
+{{- /*
+The deployment file is where all the action happens.  This brings together all the environment variables and secrets that are specified and brings up whatever containers do the work of your service.  Here, this is a container running gunicorn and an nginx sidecar.
+
+The nginx sidecar exists for traffic encryption.  https requests go to the nginx container, which decrypts them and sends them on to gunicorn, which accepts them as http.
+
+Note that postgres is not included here, it's managed by terraform.
+*/ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "versions_service.fullname" . }}
+  labels:
+{{ include "labels" . | indent 4 }}
+  # These annotations exist so that if the configmap, secrets, or newrelic configmap change
+  # then this pod is also re-deployed because these hashes change when those parts do
+  annotations:
+    checksum/configmap: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+    checksum/newrelic: {{ include (print $.Template.BasePath "/newrelic.yaml") . | sha256sum }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "versions_service.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+{{ include "labels.pod" . | indent 8 }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "versions_service.fullname" . }}-env
+          - configMapRef:
+              name: {{ template "versions_service.fullname" . }}-newrelic-env
+          - secretRef:
+              name: {{ template "versions_service.fullname" . }}-secrets
+          ports:
+            - name: http
+              containerPort: {{ .Values.gunicorn.bindport }}
+              protocol: TCP
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+        - name: nginx
+          image: "{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag }}"
+          imagePullPolicy: "{{ .Values.nginx.image.pullPolicy }}"
+          ports:
+          - name: https
+            containerPort: {{ .Values.nginx.port }}
+            protocol: TCP
+          # Probes go to nginx, which routes them to gunicorn
+          livenessProbe:
+            httpGet:
+              path: /v1/health/alive
+              port: https
+              scheme: HTTPS
+              httpHeaders:
+                - name: Host
+                  value: "127.0.0.1"
+          readinessProbe:
+            httpGet:
+              path: /v1/health/ready
+              port: https
+              scheme: HTTPS
+              httpHeaders:
+                - name: Host
+                  value: "127.0.0.1"
+          volumeMounts:
+          - name: tls
+            mountPath: /etc/nginx/ssl
+          env:
+            - name: UPSTREAM_PORT # Routes traffic to the gunicorn in the other container
+              value: "{{ .Values.gunicorn.bindport }}"
+          resources:
+{{ toYaml .Values.nginx.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: {{ template "versions_service.name" . }}
+                  release: {{ .Release.Name }}
+      volumes:
+      - name: tls
+        secret:
+          secretName: {{ .Values.nginx.existingSecretName }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}

@@ -1,0 +1,25 @@
+{{- /*
+This file specifies the service abstraction over the deployment pods. The service is contacted at the given
+port and round robins over all deployment pods to handle traffic.
+*/ -}}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "versions_service.fullname" . }}
+  labels:
+{{ include "labels" . | indent 4 }}
+{{- with .Values.service.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      name: https
+      targetPort: {{ .Values.nginx.port }}
+      protocol: TCP
+  selector:
+    app: {{ template "versions_service.name" . }}
+    release: {{ .Release.Name }}

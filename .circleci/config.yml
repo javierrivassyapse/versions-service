@@ -1,0 +1,95 @@
+version: 2
+
+jobs:
+  run-tests:
+    environment:
+      - BUILD_TARGET: test
+    docker:
+      - image: ${DOCKER_BUILD_IMAGE}
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Build test image
+          command: build --target=${BUILD_TARGET}
+      - run:
+          name: Run tests
+          command: |
+            . init
+            docker run --rm \
+              -e CC_TEST_REPORTER_ID \
+              -e GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD) \
+              -e GIT_COMMIT_SHA=$(git log -1 --pretty=format:'%H') \
+              -e GIT_COMMITTED_AT=$(git log -1 --pretty=format:%ct) \
+              -e CIRCLE_BRANCH \
+              -e CIRCLE_SHA1 \
+              "${IMAGE_NAME}:${IMAGE_TAG}" bin/autoci
+  build-prod:
+    environment:
+      - BUILD_TARGET: prod
+    docker:
+      - image: ${DOCKER_BUILD_IMAGE}
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Build prod image
+          command: build --target=${BUILD_TARGET}
+      - run:
+          name: Push image
+          command: push
+  helm-test:
+    docker:
+      - image: ${DOCKER_HELM_IMAGE}
+    steps:
+      - checkout
+      - run:
+          name: Helm lint
+          command: helm-lint -f test_values.yaml
+      - run:
+          name: Helm package
+          command: helm-package
+      - run:
+          name: Helm test
+          command: helm-test -f test_values.yaml
+  helm-build:
+    docker:
+      - image: ${DOCKER_HELM_IMAGE}
+    steps:
+      - checkout
+      - run:
+          name: Helm release
+          command: helm-release
+
+workflows:
+  version: 2
+  main:
+    jobs:
+      - run-tests:
+          context: aws-ecr-prod
+          filters:
+            tags:
+              only: /.*/
+      - build-prod:
+          context: aws-ecr-prod
+          filters:
+            tags:
+              only: /.*/
+          requires:
+            - run-tests
+      - helm-test:
+          context: aws-dev
+          filters:
+            tags:
+              only: /.*/
+          requires:
+            - docker-build
+      - helm-build:
+          context: aws-ecr-prod
+          filters:
+            tags:
+              only: /.*/
+          requires:
+            - helm-test

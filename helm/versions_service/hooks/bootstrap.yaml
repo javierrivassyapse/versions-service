@@ -1,0 +1,56 @@
+{{- /*
+If bootstrap is turned on in values, this job bootstraps the database associated with this service.
+It will run:
+  * Before the deployment is installed for the first time
+
+Steps:
+  * Create secrets with all the necessary values
+  * Run a job with the bootstrap command
+All pods will be deleted after a successful run.
+*/ -}}
+{{- if .Values.database.bootstrap -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ template "versions_service.fullname" . }}-postgres-boot
+  labels:
+{{ include "labels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+data:
+  PGHOST: {{ .Values.database.host | b64enc }}
+  PGDATABASE: {{ print "postgres" | b64enc }}
+  PGUSER: {{ .Values.database.user | b64enc }}
+  PGPASSWORD: {{ .Values.database.password | b64enc | quote }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ template "versions_service.fullname" . }}-postgres-boot"
+  labels:
+{{ include "labels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: "job"
+        image: "{{ .Values.database.management.image.repository }}:{{ .Values.database.management.image.tag }}"
+        command: [ "psql" ]
+        args:
+        - "sslmode=require"
+        - "-v"
+        - "ON_ERROR_STOP=1"
+        - "-f"
+        - "/opt/config/bootstrap.sql"
+        envFrom:
+        - secretRef:
+            name: {{ template "versions_service.fullname" . }}-postgres-boot
+{{- end -}}

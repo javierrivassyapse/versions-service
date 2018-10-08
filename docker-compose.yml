@@ -1,0 +1,85 @@
+version: "3.5"
+
+volumes:
+  db:
+  queue:
+  localstack:
+
+services:
+  postgres:
+    image: postgres:9.6-alpine
+    container_name: versions-service-postgres
+    restart: always
+    volumes:
+      - db:/var/lib/postgresql/data
+    networks:
+      - syapse
+  rabbitmq:
+    image: rabbitmq:3.6-management-alpine
+    container_name: versions-service-rabbitmq
+    restart: always
+    volumes:
+      - queue:/var/lib/rabbitmq
+    environment:
+      - "RABBITMQ_DEFAULT_VHOST=versions_service"
+    networks:
+      - syapse
+  versions-service:
+    build:
+      context: .
+      target: dev
+    user: user
+    tty: true
+    container_name: versions-service
+    restart: always
+    volumes:
+      - .:/srv
+    env_file:
+      - .env
+    ports:
+        - "18663:5000"
+    links:
+      - postgres:postgres
+      - rabbitmq:rabbitmq
+      - localstack:kinesis
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      - syapse
+  localstack:
+    container_name: versions-service-localstack
+    restart: always
+    image: localstack/localstack
+    volumes:
+      - localstack:/tmp/localstack
+    environment:
+      # Enabled services
+      - "SERVICES=kinesis:4568"
+
+      # Kinesis settings
+      - "KINESIS_ERROR_PROBABILITY=0.0"
+
+      # LocalStack settings
+      - "DEFAULT_REGION=us-west-2"
+      - "DATA_DIR=/tmp/localstack/data"
+      - "FORCE_NONINTERACTIVE=1"
+    networks:
+      - syapse
+  pgweb:
+    container_name: versions-service-pgweb
+    restart: always
+    image: sosedoff/pgweb
+    ports:
+      - "18664:8081"
+    links:
+      - postgres:postgres
+    environment:
+      - "DATABASE_URL=postgres://postgres@postgres:5432/versions_service?sslmode=disable"
+    networks:
+      - syapse
+
+networks:
+  syapse:
+    external: true
+# vim: ts=2 sw=2 sts=2 et
